@@ -165,11 +165,11 @@
             <button class="btn-fluid dock-secondary" onclick="addTime(60)">+1분</button>
             <button class="btn-fluid dock-secondary" onclick="addTime(10)">+10초</button>
             <label class="alarm-option" title="5초 전 예비 알림"><input type="checkbox" id="pre-alarm-check" checked><span>예비 알림</span></label>
-            <label class="alarm-option"><input type="checkbox" id="music-enabled" checked><span>활동 음악</span></label>
+            <label class="alarm-option"><input type="checkbox" id="music-enabled"><span>활동 음악</span></label>
             <select id="music-track" aria-label="활동 음악 변경" title="재생할 음악 선택" style="max-width:180px;background:#1e293b;color:#f8fafc;border:1px solid #475569;border-radius:8px;padding:7px;font-size:12px"><option value="./assets/activity-caremelody-10min.mp3">케어멜로디 · 밝은 활동 음악 (10분)</option></select>
             <button type="button" class="btn-fluid dock-secondary" id="music-add" title="다른 음악을 추가합니다. 추가한 파일은 새로고침하면 다시 선택해주세요.">음악 추가</button>
             <input type="file" id="music-files" accept="audio/*,.mp3,.wav,.m4a,.ogg" multiple hidden>
-            <input type="range" id="music-volume" aria-label="활동 음악 음량" title="활동 음악 음량 (알람보다 작게)" min="0" max="15" value="12" style="width:65px;accent-color:#34d399">
+            <input type="range" id="music-volume" aria-label="활동 음악 음량" title="활동 음악 음량 (100% = 원본 음량)" min="0" max="100" value="100" style="width:65px;accent-color:#34d399">
             <button class="btn-fluid dock-secondary" onclick="requestPIP()" title="PIP 모드">PIP</button>
         </div>
     </footer>
@@ -243,8 +243,8 @@
         });
         window.addEventListener('beforeunload', () => localMusicUrls.forEach(url => URL.revokeObjectURL(url)));
         try {
-            const saved = JSON.parse(localStorage.getItem('classroom-focus-music'));
-            if (saved) {musicEnabled.checked = saved.enabled !== false;musicVolume.value = Math.max(0, Math.min(15, Number(saved.volume) || 0));}
+            const saved = JSON.parse(localStorage.getItem('classroom-activity-volume-v2'));
+            if (saved) {musicVolume.value = Math.max(0, Math.min(100, Number(saved.volume) || 0));}
         } catch {}
         function syncMusic() {
             focusMusic.enabled = musicEnabled.checked;
@@ -255,7 +255,7 @@
             document.getElementById('audio-notice').textContent = '';
             syncMusic();
             if (musicEnabled.checked) focusMusic.prepare();
-            try {localStorage.setItem('classroom-focus-music', JSON.stringify({enabled:musicEnabled.checked,volume:Number(musicVolume.value)}));} catch {}
+            try {localStorage.setItem('classroom-activity-volume-v2', JSON.stringify({volume:Number(musicVolume.value)}));} catch {}
         }
         musicEnabled.addEventListener('change', changeMusic);
         musicVolume.addEventListener('input', changeMusic);
@@ -879,5 +879,6 @@
 
         updateDisplay();
     </script>
+<script src="./assets/music-picker.js"></script>
 </body>
 </html>
