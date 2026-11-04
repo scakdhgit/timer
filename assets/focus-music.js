@@ -4,8 +4,8 @@
     constructor(url, onError = () => {}) {
       this.url = url;
       this.onError = onError;
-      this.enabled = true;
-      this.volume = 0.12;
+      this.enabled = false;
+      this.volume = 1;
       this.state = {running: false, mode: 'idle', remainingSeconds: 0, alarm: false};
       this.context = null;
       this.buffer = null;
@@ -57,19 +57,6 @@
             .then(data => this.context.decodeAudioData(data));
           const decoded = await this.loading;
           if (revision !== this.revision) return;
-          // Keep user-added music below alarm level, too.
-          let peak = 0;
-          for (let ch = 0; ch < decoded.numberOfChannels; ch++) {
-            const samples = decoded.getChannelData(ch);
-            for (let i = 0; i < samples.length; i++) peak = Math.max(peak, Math.abs(samples[i]));
-          }
-          if (peak > 0.35) {
-            const scale = 0.35 / peak;
-            for (let ch = 0; ch < decoded.numberOfChannels; ch++) {
-              const samples = decoded.getChannelData(ch);
-              for (let i = 0; i < samples.length; i++) samples[i] *= scale;
-            }
-          }
           this.buffer = decoded;
         }
         this.apply();
@@ -86,7 +73,7 @@
       this.apply();
     }
     setEnabled(value) {this.enabled = Boolean(value);this.apply();}
-    setVolume(value) {this.volume = Math.max(0, Math.min(0.15, Number(value) || 0));this.apply();}
+    setVolume(value) {this.volume = Math.max(0, Math.min(1, Number(value) || 0));this.apply();}
     eligible() {
       return this.enabled && this.state.running && !this.state.alarm
         && (this.state.mode === 'stopwatch' || (this.state.mode === 'timer' && this.deadline - Date.now() > 5000));
