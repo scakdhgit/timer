@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="./assets/font.css">
     <!-- Tailwind CSS -->
     <link rel="stylesheet" href="./assets/tailwind.css">
-    <script src="./assets/focus-music.js"></script>
+    <script src="./assets/music-catalog.js"></script><script src="./assets/focus-music.js"></script>
     <style>
         body { background-color: #0f172a; color: white; transition: background-color 0.4s ease; overflow: hidden; font-family: 'Pretendard', sans-serif; user-select: none; }
         
@@ -166,7 +166,7 @@
             <button class="btn-fluid dock-secondary" onclick="addTime(10)">+10초</button>
             <label class="alarm-option" title="5초 전 예비 알림"><input type="checkbox" id="pre-alarm-check" checked><span>예비 알림</span></label>
             <label class="alarm-option"><input type="checkbox" id="music-enabled"><span>활동 음악</span></label>
-            <select id="music-track" aria-label="활동 음악 변경" title="재생할 음악 선택" style="max-width:180px;background:#1e293b;color:#f8fafc;border:1px solid #475569;border-radius:8px;padding:7px;font-size:12px"><option value="./assets/activity-caremelody-10min.mp3">케어멜로디 · 밝은 활동 음악 (10분)</option></select>
+            <select id="music-track" aria-label="활동 음악 변경" title="재생할 음악 선택" style="max-width:180px;background:#1e293b;color:#f8fafc;border:1px solid #475569;border-radius:8px;padding:7px;font-size:12px"><option value="random">음악 랜덤재생</option><option value="./assets/activity-caremelody-10min.mp3">케어멜로디 · 밝은 활동 음악 (10분)</option></select>
             <button type="button" class="btn-fluid dock-secondary" id="music-add" title="다른 음악을 추가합니다. 추가한 파일은 새로고침하면 다시 선택해주세요.">음악 추가</button>
             <input type="file" id="music-files" accept="audio/*,.mp3,.wav,.m4a,.ogg" multiple hidden>
             <input type="range" id="music-volume" aria-label="활동 음악 음량" title="활동 음악 음량 (100% = 원본 음량)" min="0" max="100" value="100" style="width:65px;accent-color:#34d399">
@@ -213,10 +213,27 @@
                 : '음악을 읽지 못했습니다. assets 폴더의 음악 파일이 함께 업로드되었는지 확인하거나 다른 MP3를 선택해주세요.';
         });
         const musicTrack = document.getElementById('music-track');
+        for (const track of window.activityMusicCatalog || []) {
+            const option = document.createElement('option');
+            option.value = track.url; option.textContent = track.name;
+            musicTrack.appendChild(option);
+        }
         const localMusicUrls = [];
+        function chooseMusic() {
+            focusMusic.random = musicTrack.value === 'random';
+            const tracks = [...musicTrack.options].filter(o => o.value !== 'random');
+            const alternatives = tracks.filter(o => o.value !== focusMusic.url);
+            const pool = alternatives.length ? alternatives : tracks;
+            const url = focusMusic.random ? pool[Math.floor(Math.random() * pool.length)].value : musicTrack.value;
+            if (url === focusMusic.url) { focusMusic.stop(); return focusMusic.prepare(); }
+            return focusMusic.setTrack(url);
+        }
+        focusMusic.random = true;
+        focusMusic.onTrackEnd = () => { if (musicTrack.value === 'random' && focusMusic.eligible()) chooseMusic(); };
+
         musicTrack.addEventListener('change', () => {
             document.getElementById('audio-notice').textContent = '';
-            focusMusic.setTrack(musicTrack.value);
+            chooseMusic();
         });
         document.getElementById('music-add').onclick = () => document.getElementById('music-files').click();
         document.getElementById('music-files').addEventListener('change', event => {
@@ -236,7 +253,7 @@
             }
             if (first) {
                 musicTrack.value = first;
-                focusMusic.setTrack(first);
+                chooseMusic();
                 document.getElementById('audio-notice').textContent = '내 음악을 추가했습니다. 서버로 업로드되지 않으며, 새로고침하면 다시 선택해주세요.';
             }
             event.target.value = '';
@@ -249,7 +266,7 @@
         function syncMusic() {
             focusMusic.enabled = musicEnabled.checked;
             focusMusic.volume = Number(musicVolume.value) / 100;
-            focusMusic.update({running:isRunning, mode:appMode, remainingSeconds:currentTime, alarm:isRinging});
+            focusMusic.update({running:isRunning, mode:appMode, remainingSeconds:currentTime, alarm:isRinging, preAlarm:preAlarmCheckbox.checked});
         }
         function changeMusic() {
             document.getElementById('audio-notice').textContent = '';
@@ -257,6 +274,7 @@
             if (musicEnabled.checked) focusMusic.prepare();
             try {localStorage.setItem('classroom-activity-volume-v2', JSON.stringify({volume:Number(musicVolume.value)}));} catch {}
         }
+        preAlarmCheckbox.addEventListener('change', syncMusic);
         musicEnabled.addEventListener('change', changeMusic);
         musicVolume.addEventListener('input', changeMusic);
         window.addEventListener('pagehide', () => focusMusic.stop());
@@ -310,6 +328,7 @@
             let pressTimer = null;
             let activePointer = null;
             let longPressed = false;
+            let suppressClickUntil = 0;
             element.style.touchAction = 'none';
             element.setAttribute('role', 'button');
             element.setAttribute('tabindex', '0');
@@ -326,8 +345,8 @@
             }
             function inside(event) {
                 const rect = element.getBoundingClientRect();
-                return event.clientX >= rect.left && event.clientX <= rect.right
-                    && event.clientY >= rect.top && event.clientY <= rect.bottom;
+                return event.clientX >= rect.left - 16 && event.clientX <= rect.right + 16
+                    && event.clientY >= rect.top - 16 && event.clientY <= rect.bottom + 16;
             }
 
             element.addEventListener('pointerdown', event => {
@@ -335,10 +354,11 @@
                 event.preventDefault();
                 activePointer = event.pointerId;
                 longPressed = false;
-                element.setPointerCapture(activePointer);
+                try { element.setPointerCapture(activePointer); } catch {}
                 pressTimer = setTimeout(() => {
                     pressTimer = null;
                     longPressed = true;
+                    suppressClickUntil = Date.now() + 1200;
                     resetTimer();
                     if ('vibrate' in navigator) navigator.vibrate(60);
                 }, 700);
@@ -351,6 +371,7 @@
                 event.preventDefault();
                 event.stopPropagation();
                 const activate = !longPressed && inside(event);
+                suppressClickUntil = Date.now() + 800;
                 cancelPress();
                 if (activate) handleMainAction();
             });
@@ -365,7 +386,7 @@
             element.addEventListener('click', event => {
                 event.preventDefault();
                 event.stopPropagation();
-                if (event.detail === 0) handleMainAction(); // 보조기기에서의 활성화
+                if (Date.now() > suppressClickUntil) handleMainAction(); // 보조기기에서의 활성화
             });
             element.addEventListener('keydown', event => {
                 if (event.code !== 'Space' && event.code !== 'Enter') return;
@@ -631,6 +652,7 @@
         }
 
         function startTimer() {
+            if (musicEnabled.checked && !isRunning && appMode === "idle" && musicTrack.value === "random") chooseMusic();
             if (musicEnabled.checked) focusMusic.prepare();
             if (appMode === 'overtime') { resetTimer(); return; }
 
@@ -806,7 +828,7 @@
                     #pip-clock-container { font-size: 30vw; font-weight: 900; font-variant-numeric: tabular-nums; transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); white-space: nowrap; width: 100%; text-align: center; display: flex; align-items: center; justify-content: center; color: #f8fafc; }
                     .pip-clickable { transition: all 0.2s; cursor: pointer; }
                     .pip-clickable:hover { opacity: 0.8; }
-                    .pip-clickable:active { transform: scale(0.9); }
+                    .pip-clickable:active { opacity:0.8; }
 
                     @keyframes breathe { 0%, 100% { opacity: 1; transform:scale(1);} 50% { opacity: 0.3; transform:scale(0.98);} }
                     .paused-anim { animation: breathe 2s infinite cubic-bezier(0.4, 0, 0.2, 1); }
@@ -832,7 +854,7 @@
 
                 const pipColonBtn = pipWindowObj.document.createElement('span');
                 pipColonBtn.id = 'pip-colon-btn'; pipColonBtn.className = 'pip-clickable';
-                pipColonBtn.innerText = ':'; pipColonBtn.style.padding = '0 10px';
+                pipColonBtn.innerText = ':'; pipColonBtn.style.cssText = 'padding:0 14px;min-width:44px;min-height:44px;box-sizing:border-box;transform:none';
 
                 const pipSecBtn = pipWindowObj.document.createElement('span');
                 pipSecBtn.id = 'pip-sec-btn'; pipSecBtn.className = 'pip-clickable';
